@@ -1,12 +1,13 @@
+from pickletools import long1
 import ccxt 
 import time
 import pandas as pd
 import math
 import qortjf_slacker
 
-api_key = "yours"
-secret  = "yours"
-myToken = "yours"
+api_key = ""
+secret  = ""
+myToken = ""
 
 binance = ccxt.binance(config={
  'apiKey': api_key, 
@@ -25,6 +26,10 @@ position = {
 turn = {
     "type" : None,
     "message" : None
+}
+
+rsi_position = {
+     "type" : None
 }
 
 error = 0 
@@ -78,16 +83,16 @@ def rsi_binance(itv='1h', simbol='BTC/USDT'):
 
 ## 33%로 포지션 매수/매도 수량 설정
 def cal_amount(usdt_balance, current_price):
-    portion = 0.33 ## (자산의 몇 % 투자 비율, 현재 33%)
+    portion = 0.54 ## (자산의 몇 % 투자 비율, 현재 33%)
     usdt_trade = usdt_balance * portion
-    amount = math.floor((usdt_trade * 1000000)/current_price) / 1000000 *13
+    amount = math.floor((usdt_trade * 1000000)/current_price) / 1000000 * 13
     return amount 
 
 
 ## 트레일링 스탑 마켓 롱/ 숏 진입 함수
-def enter_position(symbol, RSI, amount, position):
+def enter_position(symbol, RSI, amount, position, rsi_position):
 
-  if RSI <= 30:
+     if rsi_position['type'] == 'long' and RSI > 28 and RSI <= 29:
       position['amount'] = amount
       binance.create_market_buy_order(symbol=symbol, amount=amount)
       balance = binance.fetch_balance()
@@ -98,12 +103,12 @@ def enter_position(symbol, RSI, amount, position):
                       entry_price = float(entry_price)
       side = 'sell'
       order_type = 'TRAILING_STOP_MARKET'
-      rate = '0.7' ## (callbackRate 비율, 현재 0.7%)
+      rate = '0.9' ## (callbackRate 비율, 현재 0.7%)
       price = None
       params = {'stopPrice': entry_price, 'callbackRate': rate, 'reduceOnly': True}
       binance.create_order(symbol, order_type, side, amount, price, params)
       
-  elif RSI >= 69:
+     elif rsi_position['type'] == 'short' and RSI < 72 and RSI >= 71:
       position['amount'] = amount
       binance.create_market_sell_order(symbol=symbol, amount=amount)
       balance = binance.fetch_balance()
@@ -138,6 +143,7 @@ while True:
  ## RSI 1분봉 기준
      RSI= rsi_binance(itv='1m')
 
+
  ## 중복 구매 방지
      if len(resp) == 0:
          turn['type'] = 'None'
@@ -147,10 +153,19 @@ while True:
          if turn['message'] is 'on':
              qortjf_slacker.post_message(myToken, "#qortjf", "현재가:" + str(current_price) + ", RSI:" + str(round(RSI, 2)) + ", 잔고:" + str(round(usdt, 2)) + ", 수익률:" + str(round(float(balance['info']['totalUnrealizedProfit']), 2)) + "USDT , 구매여부:" + str(turn['type']) + ", error_count:" + str(error))
              turn['message'] = 'None'
+             rsi_position['type'] == 'None'
+
      
   ## 트레일링 스탑 시작
      if turn['type'] is 'None':
-         enter_position(symbol, RSI, amount, position)
+         enter_position(symbol, RSI, amount, position, rsi_position)
+
+    
+     if RSI <= 27:
+      rsi_position['type'] = 'long'
+      
+     elif RSI >= 73:
+      rsi_position['type'] = 'short'
     
   
      print("현재가:", current_price, ", RSI:", round(RSI, 2), ", 잔고:", round(usdt, 2), ", 수익률:", round(float(balance['info']['totalUnrealizedProfit']), 2), "USDT , 구매여부:", turn['type'], " error_count:", error)
